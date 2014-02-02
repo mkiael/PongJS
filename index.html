@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PongJS</title>
+<style>
+body
+{
+background-color:#000000;
+color:#FFFFFF;
+font-family:Arial,Helvectica,sans-serif;
+}
+td.score
+{
+text-align:center;
+vertical-align:top;
+font-size:80px;
+}
+</style>
+</head>
+<body>
+<center>
+<canvas id="screen" width="640" height="480" style="border:2px solid #FFFFFF;"></canvas>
+<table style="width:800px">
+   <tr>
+      <th>Player 1</th>
+      <th>Player 2</th>
+   </tr>
+   <tr>
+      <td id="scorep1" class="score">0</td>
+      <td id="scorep2" class="score">0</td>
+   </tr>
+</table>
+</center>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+
+   function Player() {
+      this.pos;
+      this.size;
+      this.speed = 10;
+   }
+
+   Player.prototype.isAtTop = function() {
+      return (this.pos.y-this.size.h/2) <= 0;
+   }
+
+   Player.prototype.isAtBottom = function() {
+      return (this.pos.y+this.size.h/2) >= canv.height;
+   }
+
+   Player.prototype.update = function() {
+      if (keyUpPressed && !this.isAtTop()) {
+         localPlayer.pos.y -= this.speed;
+         return true;
+      }
+      else if (keyDownPressed && !this.isAtBottom()) {
+         localPlayer.pos.y += this.speed;
+         return true;
+      }
+
+      return false;
+   }
+
+   Player.prototype.draw = function(ctx) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(this.pos.x-this.size.w/2, 
+                   this.pos.y-this.size.h/2, 
+                   this.size.w,
+                   this.size.h);
+   }
+
+   function Ball() {
+      this.pos = {x: 0, y: 0};
+      this.size = {w: 10, h: 10};
+   }
+
+   Ball.prototype.draw = function(ctx) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(this.pos.x-this.size.w/2,
+                   this.pos.y-this.size.h/2,
+                   this.size.w,
+                   this.size.h);
+   }
+
+   var socket = io.connect('http://localhost'),
+       canv = document.getElementById("screen"),
+       context = canv.getContext('2d'),
+       keyUpPressed = false,
+       keyDownPressed = false,
+       localPlayer,
+       remotePlayer,
+       ball;
+  
+   socket.on('add opponent', function(data) {
+      remotePlayer = new Player();
+      remotePlayer.size = data.size;
+      remotePlayer.pos = data.pos;
+   });
+
+   socket.on('add ball', function(data) {
+      ball = new Ball();
+      ball.size = data.size
+      ball.pos = data.pos;
+   });
+
+   socket.on('init', function(data) {
+      localPlayer = new Player();
+      localPlayer.size = data.size;
+      localPlayer.pos = data.pos;
+   });
+
+   socket.on('opponent moved', function(data) {
+      if (remotePlayer) {
+         console.log(remotePlayer);
+         remotePlayer.pos = data;
+      }
+   });
+
+   socket.on('ball moved', function(data) {
+      if (ball) {
+         ball.pos = data;
+      }
+   });
+
+   socket.on('update score', function(score) {
+      console.log(score);
+      document.getElementById("scorep1").innerHTML = score.player1;
+      document.getElementById("scorep2").innerHTML = score.player2;
+   });
+
+   window.addEventListener('keydown', function(e) {
+      if (keyUpPressed || keyDownPressed) return;
+
+      if (e.keyCode == 38) {
+         keyUpPressed = true;
+      }
+      else if (e.keyCode == 40) {
+         keyDownPressed = true;
+      }
+   }, false);
+  
+   window.addEventListener('keyup', function(e) {
+      if (e.keyCode == 38) {
+         keyUpPressed = false;
+      }
+      else if (e.keyCode == 40) {
+         keyDownPressed = false;
+      }
+   }, false);
+  
+
+   socket.emit('add player', {});
+
+   setInterval(function() {
+
+      context.clearRect(0, 0, canv.width, canv.height);
+
+      // Draws a dashed line through the canvas.
+      // Does not work in Firefox.
+      /*context.beginPath();
+      context.setLineDash([4, 6]);
+      context.moveTo(canv.width/2, 0);
+      context.lineTo(canv.width/2, canv.height);
+      context.strokeStyle = '#FFFFFF';
+      context.stroke();*/
+
+      if (!localPlayer) return;
+
+      if (localPlayer.update()) {
+         socket.emit('move', localPlayer.pos);
+      }
+
+      localPlayer.draw(context);
+      
+      if (remotePlayer) {
+         remotePlayer.draw(context);
+      }
+
+      if (ball) {
+         ball.draw(context);
+      }
+
+   }, 20);
+
+</script>
+</body>
+</html>
